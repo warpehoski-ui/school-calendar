@@ -1,15 +1,23 @@
-name: Update calendar
+name: Build and deploy
 
 on:
   schedule:
     - cron: "0 13 * * *"
+  push:
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
 
 jobs:
-  update:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +27,20 @@ jobs:
       - run: pip install icalendar recurring-ical-events tzdata
       - name: Download school calendar
         run: curl -fL -o basic.ics "https://calendar.google.com/calendar/ical/wnsk8.com_4gk29dm9gdovm9n2k4r6ulqi00%40group.calendar.google.com/public/basic.ics"
-      - name: Filter calendar
+      - name: Build calendar files
         run: python filter_calendar.py
-      - name: Save result
-        run: |
-          git config user.name "github-actions"
-          git config user.email "github-actions@users.noreply.github.com"
-          git add WNS_6th_8th_All_School.ics
-          git diff --cached --quiet || git commit -m "Update calendar"
-          git push
+      - name: Add web app
+        run: cp index.html site/index.html
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>School Calendar by Grade</title>
+<style>
+:root{--bg:#fff;--fg:#111;--muted:#666;--line:#d5d5d5;--card:#f6f6f6;--accent:#1a5fb4;--accent-fg:#fff}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#a0a0a0;--line:#333;--card:#1b1b1b;--accent:#6ea8fe;--accent-fg:#111}}
+*{box-sizing:border-box}
+body{margin:0;padding:20px;background:var(--bg);color:var(--fg);font:16px/1.5 -apple-system,system-ui,"Segoe UI",Roboto,sans-serif}
+main{max-width:480px;margin:0 auto}
+h1{font-size:1.4rem;margin:0 0 6px}
+.sub{color:var(--muted);margin:0 0 18px;font-size:.95rem}
+label{display:flex;align-items:center;gap:12px;padding:12px 14px;margin-bottom:8px;border:1px solid var(--line);border-radius:10px;background:var(--card);cursor:pointer}
+label.fixed{cursor:default;opacity:.85}
+input[type=checkbox]{width:22px;height:22px;flex:none;accent-color:var(--accent)}
+.note{margin-left:auto;color:var(--muted);font-size:.85rem}
+button{font:inherit;font-weight:600;border:0;border-radius:10px;padding:14px 16px;background:var(--accent);color:var(--accent-fg);cursor:pointer}
+#go{width:100%;margin-top:8px}
+#result{margin-top:20px}
+#url{width:100%;font:.9rem ui-monospace,Menlo,monospace;padding:12px;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--fg);margin-bottom:8px}
+#copy{width:100%}
+details{margin-top:16px;color:var(--muted);font-size:.9rem}
+summary{cursor:pointer}
+</style>
+</head>
+<body>
+<main>
+<h1>School Calendar by Grade</h1>
+<p class="sub">Select grades, then generate a calendar URL. The URL updates automatically when the school calendar changes.</p>
+
+<div id="grades">
+<label class="fixed"><input type="checkbox" checked disabled> All School <span class="note">always included</span></label>
+<label><input type="checkbox" id="gK"> Kindergarten</label>
+<label><input type="checkbox" id="g1"> 1st Grade</label>
+<label><input type="checkbox" id="g2"> 2nd Grade</label>
+<label><input type="checkbox" id="g3"> 3rd Grade</label>
+<label><input type="checkbox" id="g4"> 4th Grade</label>
+<label><input type="checkbox" id="g5"> 5th Grade</label>
+<label><input type="checkbox" id="g6"> 6th Grade</label>
+<label><input type="checkbox" id="g7"> 7th Grade</label>
+<label><input type="checkbox" id="g8"> 8th Grade</label>
+</div>
+
+<button id="go" type="button">Generate selected grades calendar URL</button>
+
+<div id="result" hidden>
+<input id="url" type="text" readonly>
+<button id="copy" type="button">Copy URL</button>
+<details>
+<summary>How to add it to a calendar</summary>
+<p><strong>Google Calendar:</strong> on a computer (or the desktop site on a phone), next to "Other calendars" click +, choose "From URL", and paste the URL. Google refreshes subscribed calendars slowly, often several hours to a day.</p>
+<p><strong>iPhone:</strong> Settings &gt; Calendar &gt; Accounts &gt; Add Account &gt; Other &gt; Add Subscribed Calendar, then paste the URL.</p>
+<p><strong>Outlook:</strong> Add calendar &gt; Subscribe from web, then paste the URL.</p>
+</details>
+</div>
+</main>
+
+<script>
+var TOKENS = ["K","1","2","3","4","5","6","7","8"];
+
+function fileName(selected) {
+  return selected.length ? selected.join("_") : "all";
+}
+
+function buildUrl(selected) {
+  var base = location.href.split(/[?#]/)[0];
+  return new URL("calendars/" + fileName(selected) + ".ics", base).href;
+}
+
+document.getElementById("go").addEventListener("click", function () {
+  var selected = TOKENS.filter(function (t) {
+    return document.getElementById("g" + t).checked;
+  });
+  document.getElementById("url").value = buildUrl(selected);
+  document.getElementById("result").hidden = false;
+});
+
+document.getElementById("copy").addEventListener("click", function () {
+  var box = document.getElementById("url");
+  var btn = this;
+  function done() {
+    btn.textContent = "Copied";
+    setTimeout(function () { btn.textContent = "Copy URL"; }, 1500);
+  }
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(box.value).then(done, function () {
+      box.select();
+      document.execCommand("copy");
+      done();
+    });
+  } else {
+    box.select();
+    document.execCommand("copy");
+    done();
+  }
+});
+</script>
+</body>
+</html>

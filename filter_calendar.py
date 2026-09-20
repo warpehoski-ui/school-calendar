@@ -1,13 +1,15 @@
 import re
+import os
 import datetime
 import hashlib
+from itertools import combinations
 from icalendar import Calendar, Event
 import recurring_ical_events
 
-GRADES = [6, 8]  # 0 = Kindergarten, 1-8 = grades
 SRC = "basic.ics"
-OUT = "WNS_6th_8th_All_School.ics"
-CAL_NAME = "WNS 6th, 8th and All School"
+OUT_DIR = os.path.join("site", "calendars")
+TOKENS = ["K", "1", "2", "3", "4", "5", "6", "7", "8"]
+LABELS = ["Kindergarten"] + [f"Grade {i}" for i in range(1, 9)]
 
 today = datetime.date.today()
 year = today.year if today.month >= 8 else today.year - 1
@@ -79,29 +81,26 @@ def copy_event(e):
     dkey = ds.strftime("%Y%m%dT%H%M%S") if isinstance(ds, datetime.datetime) else ds.strftime("%Y%m%d")
     uid = str(e.get("UID", hashlib.md5(str(e.get("SUMMARY")).encode()).hexdigest())).split("@")[0]
     n.add("UID", f"{uid}-{dkey}@wns-split")
-    n.add("DTSTAMP", datetime.datetime.now(datetime.timezone.utc))
+    stamp = datetime.datetime(2020, 1, 1, tzinfo=datetime.timezone.utc)
+    for p in ("LAST-MODIFIED", "CREATED"):
+        if p in e:
+            stamp = e[p].dt
+            break
+    n.add("DTSTAMP", stamp)
     n.add("SEQUENCE", 0)
     return n
 
 
 src = Calendar.from_ical(open(SRC, "rb").read())
-out = Calendar()
-out.add("PRODID", "-//WNS calendar split//EN")
-out.add("VERSION", "2.0")
-out.add("CALSCALE", "GREGORIAN")
-out.add("METHOD", "PUBLISH")
-out.add("X-WR-CALNAME", CAL_NAME)
-out.add("X-WR-TIMEZONE", "America/Los_Angeles")
-for tz in src.walk("VTIMEZONE"):
-    out.add_component(tz)
+timezones = list(src.walk("VTIMEZONE"))
 
 seen = set()
-keep = []
-for e in recurring_ical_events.of(src).between(START, END):
+items = []  # (component, classification)
+for e in sorted(recurring_ical_events.of(src).between(START, END), key=sort_key):
     if str(e.get("STATUS", "")).upper() == "CANCELLED":
         continue
     c = classify(str(e.get("SUMMARY", "")))
-    if not (c == "all" or (isinstance(c, set) and c & set(GRADES))):
+    if c == "other":
         continue
     sig = (
         str(e.get("SUMMARY")),
@@ -113,10 +112,34 @@ for e in recurring_ical_events.of(src).between(START, END):
     if sig in seen:
         continue
     seen.add(sig)
-    keep.append(e)
+    items.append((copy_event(e), c))
 
-for e in sorted(keep, key=sort_key):
-    out.add_component(copy_event(e))
+os.makedirs(OUT_DIR, exist_ok=True)
+written = 0
+for r in range(0, 10):
+    for subset in combinations(range(9), r):
+        chosen = set(subset)
+        cal = Calendar()
+        cal.add("PRODID", "-//WNS calendar split//EN")
+        cal.add("VERSION", "2.0")
+        cal.add("CALSCALE", "GREGORIAN")
+        cal.add("METHOD", "PUBLISH")
+        if chosen:
+            name = "WNS " + ", ".join(LABELS[i] for i in subset) + " + All School"
+        else:
+            name = "WNS All School"
+        cal.add("X-WR-CALNAME", name)
+        cal.add("X-WR-TIMEZONE", "America/Los_Angeles")
+        cal.add("X-PUBLISHED-TTL", "PT12H")
+        cal.add("REFRESH-INTERVAL", datetime.timedelta(hours=12), parameters={"VALUE": "DURATION"})
+        for tz in timezones:
+            cal.add_component(tz)
+        for comp, c in items:
+            if c == "all" or (isinstance(c, set) and c & chosen):
+                cal.add_component(comp)
+        fname = "_".join(TOKENS[i] for i in subset) if chosen else "all"
+        with open(os.path.join(OUT_DIR, fname + ".ics"), "wb") as f:
+            f.write(cal.to_ical())
+        written += 1
 
-open(OUT, "wb").write(out.to_ical())
-print(len(keep), "events written to", OUT)
+print(len(items), "events classified;", written, "calendar files written to", OUT_DIR)

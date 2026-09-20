@@ -8,8 +8,9 @@ import recurring_ical_events
 
 SRC = "basic.ics"
 OUT_DIR = os.path.join("site", "calendars")
-TOKENS = ["K", "1", "2", "3", "4", "5", "6", "7", "8"]
-LABELS = ["Kindergarten"] + [f"Grade {i}" for i in range(1, 9)]
+TOKENS = ["P", "D", "K", "1", "2", "3", "4", "5", "6", "7", "8"]
+LABELS = ["Preschool / ECC", "Developmental Kindergarten (DK)", "Kindergarten"] + [f"Grade {i}" for i in range(1, 9)]
+NLEVELS = len(TOKENS)  # level index: 0=P, 1=DK, 2=K, 3..10 = grades 1..8
 
 today = datetime.date.today()
 year = today.year if today.month >= 8 else today.year - 1
@@ -27,39 +28,45 @@ SINGLE = re.compile(r"(?<![A-Za-z0-9])" + ORD + r"(?![A-Za-z0-9])", re.I)
 def start_val(tok):
     t = tok.upper()
     if t == "PS":
-        return -2
-    if t == "DK":
-        return -1
-    if t == "K":
         return 0
-    return int(re.match(r"\d+", t).group())
+    if t == "DK":
+        return 1
+    if t == "K":
+        return 2
+    return int(re.match(r"\d+", t).group()) + 2
 
 
 def classify(s):
     if re.search(r"\bAll[- ]School\b", s, re.I):
         return "all"
-    if re.search(r"preschool", s, re.I) or re.search(r"\bECC\b", s):
-        return "other"
     g = set()
+    outside = False
     for m in RANGE.finditer(s):
         a = start_val(m.group(1))
-        b = int(m.group(3) or m.group(4))
-        g.update(range(max(a, 0), min(b, 12) + 1))
+        b = int(m.group(3) or m.group(4)) + 2
+        if b > NLEVELS - 1:
+            outside = True
+        g.update(range(a, min(b, NLEVELS - 1) + 1))
     for m in SINGLE.finditer(s):
-        g.add(int(m.group(1)))
+        n = int(m.group(1))
+        if 1 <= n <= 8:
+            g.add(n + 2)
+        else:
+            outside = True
     if re.search(r"DK\s*/\s*K\b", s) or re.search(r"\bKindergarten\b", s, re.I):
+        g.add(2)
+    if re.search(r"(?<![A-Za-z])DK(?![A-Za-z])", s):
+        g.add(1)
+    if re.search(r"preschool", s, re.I) or re.search(r"\bECC\b", s) or re.search(r"(?<![A-Za-z])PS(?![A-Za-z])", s):
         g.add(0)
-    if not g and re.search(r"Middle School", s, re.I):
-        g |= {6, 7, 8}
+        if re.search(r"\bfor\s+preschool", s, re.I):
+            return {0}
+    if not g and not outside and re.search(r"Middle School", s, re.I):
+        g |= {8, 9, 10}
     if g:
-        g = {x for x in g if 0 <= x <= 8}
-        if not g:
-            return "other"
-        if g == set(range(9)):
+        if g == set(range(NLEVELS)):
             return "all"
         return g
-    if re.search(r"(?<![A-Za-z])DK(?![A-Za-z])", s):
-        return "other"
     return "all"
 
 
@@ -100,8 +107,6 @@ for e in sorted(recurring_ical_events.of(src).between(START, END), key=sort_key)
     if str(e.get("STATUS", "")).upper() == "CANCELLED":
         continue
     c = classify(str(e.get("SUMMARY", "")))
-    if c == "other":
-        continue
     sig = (
         str(e.get("SUMMARY")),
         str(e["DTSTART"].dt),
@@ -116,8 +121,8 @@ for e in sorted(recurring_ical_events.of(src).between(START, END), key=sort_key)
 
 os.makedirs(OUT_DIR, exist_ok=True)
 written = 0
-for r in range(0, 10):
-    for subset in combinations(range(9), r):
+for r in range(0, NLEVELS + 1):
+    for subset in combinations(range(NLEVELS), r):
         chosen = set(subset)
         cal = Calendar()
         cal.add("PRODID", "-//WNS calendar split//EN")

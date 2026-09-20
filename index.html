@@ -32,6 +32,8 @@ summary{cursor:pointer}
 
 <div id="grades">
 <label class="fixed"><input type="checkbox" checked disabled> All School <span class="note">always included</span></label>
+<label><input type="checkbox" id="gP"> Preschool / ECC</label>
+<label><input type="checkbox" id="gD"> Developmental Kindergarten (DK)</label>
 <label><input type="checkbox" id="gK"> Kindergarten</label>
 <label><input type="checkbox" id="g1"> 1st Grade</label>
 <label><input type="checkbox" id="g2"> 2nd Grade</label>
@@ -58,7 +60,7 @@ summary{cursor:pointer}
 </main>
 
 <script>
-var TOKENS = ["K","1","2","3","4","5","6","7","8"];
+var TOKENS = ["P","D","K","1","2","3","4","5","6","7","8"];
 
 function fileName(selected) {
   return selected.length ? selected.join("_") : "all";
